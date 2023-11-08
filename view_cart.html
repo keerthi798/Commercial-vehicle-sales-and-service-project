@@ -1,0 +1,112 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Shopping Cart</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f7f7f7;
+            margin: 0;
+            padding: 0;
+        }
+
+        h1 {
+            text-align: center;
+            background-color: #333;
+            color: #fff;
+            padding: 10px;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        li {
+            background-color: #fff;
+            margin: 10px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        li::before {
+            content: "\2022";
+            color: #333;
+            font-weight: bold;
+            display: inline-block;
+            width: 1em;
+            margin-left: -1em;
+        }
+    </style>
+</head>
+<body>
+    <h1>Shopping Cart</h1>
+    <form id="remove-form" method="POST">
+        {% csrf_token %}
+    </form>
+    <ul>
+        {% for item in cart_items %}
+            <li>
+                <div class="product-container">
+                    <img src="{{ item.product.parts_image.url }}" alt="{{ item.product.partsname }} Image" width="100">
+                    <div class="product-details">
+                        <h2>{{ item.product.partsname }}</h2>
+                        <p class="product-description">{{ item.product.description }}</p>
+                        <p class="product-price">Price: ${{ item.product.price }}</p>
+                        <p class="product-availability">Availability: {{ item.product.quantity }} in stock</p>
+                    </div>
+                </div>
+                <button class="remove-button" data-product-id="{{ item.product.id }}">Remove</button>
+                <button class="place-order-button">Place Order</button>
+            </li>
+        {% empty %}
+            <li>Your cart is empty.</li>
+        {% endfor %}
+    </ul>
+</body>
+
+   
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            // Get the CSRF token from the page
+            var csrftoken = $("[name=csrfmiddlewaretoken]").val();
+    
+            // When the "Remove" button is clicked
+            $(".remove-button").click(function () {
+                var productId = $(this).data("product-id");
+    
+                // Store a reference to the button that was clicked
+                var $button = $(this);
+    
+                // Send an AJAX POST request to remove the product from the cart
+                $.ajax({
+                    type: "POST",
+                    url: "/remove_from_cart/" + productId + "/",  // Replace with your actual URL
+                    data: {
+                        csrfmiddlewaretoken: csrftoken  // Include the CSRF token in the request data
+                    },
+                    success: function (data) {
+                        if (data.success) {
+                            // Update the cart view or reload the page as needed
+                            alert("Item removed from the cart!");
+    
+                            // Remove the closest <li> element from the button
+                            $button.closest("li").remove();
+                        } else {
+                            alert("Failed to remove the item from the cart.");
+                        }
+                    }
+                });
+            });
+        });
+    </script>
+    
+    
+       
+</body>
+
+</html>

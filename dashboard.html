@@ -49,7 +49,7 @@
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                   
+                {% if user.is_authenticated %}
                     <li class="nav-item">
                         <a class="nav-link" href="#home">Home</a>
                     </li>
@@ -60,7 +60,7 @@
                         <a class="nav-link" href="">vehicles</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="">Services</a>
+                        <a class="nav-link" href="{% url 'booking' %}">Services</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="">Spare parts</a>
@@ -68,7 +68,20 @@
                     <li class="nav-item">
                         <a class="btn btn-brand"  href="{% url 'logout' %}" id="logout-link">Logout</a>
                     </li>
-                    <li><a><strong><i> welcome, {{ user.email }}</i></strong></a></li>         
+                    
+                        <li><a><strong> Welcome, {{ user.email }}</strong></a></li>
+                         
+                 
+                    {% else %}
+                    <li class="nav-item">
+                        <a class="btn btn-brand" href="{% url 'login' %}">signin</a>
+                    </li>
+                  
+                    <li class="nav-item">
+                        <a class="btn btn-outline-light ms-3" href="{% url 'signup' %}">signup</a>
+                    </li>
+                
+                {% endif %}         
                 </ul>
                 
             </div>
@@ -102,7 +115,7 @@
             </div>
         </div>
     </div>
-
+{% comment %} 
     <section id="services" class="text-center">
         <div class="container">
             <div class="row">
@@ -166,7 +179,7 @@
                 </div>
             </div>
         </div>
-    </section>
+    </section> {% endcomment %}
 
     <section class="bg-light" id="portfolio">
         <div class="container">
@@ -174,9 +187,8 @@
                 <div class="col-12">
                     <div class="intro">
                         <h6>Work</h6>
-                        <h1>Successful projects</h1>
-                        <p class="mx-auto">Contrary to popular belief, Lorem Ipsum is not simply random text. It has
-                            roots in a piece of classical Latin literature from 45 BC, making it over 2000 years old</p>
+                        <h1>OUR SERVICES</h1>
+                        <p class="mx-auto">Welcome to sparx motors, your one-stop destination for sparx periodic maintenance services in Kerala . Our team of experienced technicians is dedicated to ensuring your vehicle runs smoothly and efficiently with our comprehensive maintenance services.</p>
                     </div>
                 </div>
             </div>
