@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.models import User
 from django.conf import settings
+
 from django.db import models
 
 class CustomUser(AbstractUser):
@@ -36,9 +37,10 @@ class Parts(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     parts_image = models.ImageField(upload_to='part_images/')
     quantity = models.PositiveIntegerField(default=0)
-    category = models.CharField(max_length=50, default='Uncategorized') # Add category field
-    subcategory = models.CharField(max_length=50,default='Uncategorized')
-
+    categories = models.CharField(max_length=100, null=True, blank=True, default='Uncategorized')
+   
+    
+    
     def __str__(self):
         return self.partsname
     
@@ -63,6 +65,39 @@ class UserProfile(models.Model):
     
     def str(self):
          return self.username   
+
+
+class CartItem1(models.Model):
+    cart = models.ForeignKey('Cart', on_delete=models.CASCADE)
+    product = models.ForeignKey('Parts', on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField(default=1)
+
+    def __str__(self):
+        return f"{self.quantity} x {self.product.name}"
+    
     
 
+class Cart(models.Model):
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    products = models.ManyToManyField(Parts, through='CartItem1')
+
+    def __str__(self):
+        return f"Cart for {self.user.username}"   
+class Order(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    products = models.ManyToManyField(Parts, through='OrderItem')
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_id = models.CharField(max_length=100, null=True, blank=True)
+    payment_status = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
     
+    def __str__(self):
+        return f"Order {self.id} by {self.user.username}"
+class OrderItem(models.Model):
+    order = models.ForeignKey(Order, on_delete=models.CASCADE)
+    product = models.ForeignKey(Parts, on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField(default=1)
+    item_total = models.DecimalField(max_digits=10, decimal_places=2)
+
+    def __str__(self):
+        return f"{self.quantity} x {self.product.name} in Order {self.order.id}"

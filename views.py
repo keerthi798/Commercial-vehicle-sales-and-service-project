@@ -1,4 +1,5 @@
 from audioop import reverse
+from django.contrib.auth import update_session_auth_hash
 from django.urls import reverse
 from django.template.loader import render_to_string
 from django.shortcuts import render, redirect
@@ -17,7 +18,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404
 from django.contrib import messages
-
+from django.contrib.auth import authenticate, login
 # from .forms import ServiceBookingForm
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
@@ -25,30 +26,49 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Image
 from .models import ServiceBooking
 from .forms import PartForm
 from .models import UserProfile  # Adjust the import from forms to models
-from .models import Parts,CartItem, WishlistItem
+from .models import Parts,CartItem,WishlistItem
 from .models import CustomUser
 import re
+from django.core.exceptions import ObjectDoesNotExist
 from django.http import Http404
 from django.utils.html import strip_tags
+from .models import Cart,CartItem1
+from django.http import JsonResponse
+from django.conf import settings
+from .models import UserProfile, Parts, Cart, CartItem1, Order, OrderItem
+import razorpay
+import json
+from django.views.decorators.csrf import csrf_exempt
 
 
   # Ensure the correct import path for CustomUser model
 
+# def index(request):
+#    if request.user.is_authenticated:
+#     user_profile = UserProfile.objects.get(user=request.user)
+#     # if request.method == 'POST':
+#     #     rating = request.POST.get('rating')
+#     #     feedback = request.POST.get('feedback')
+#     #     greeting = request.POST.get('greeting')
+
+#     #     if not rating:
+#     #         return render(request, 'index.html', {'error_message': 'Please provide a rating.'})
+
+#     #     return redirect('index')  # Redirect to the home page
+#     return render(request, 'index.html', {'user_profile': user_profile})
+#    else:
+#         return render(request, 'index.html')
 def index(request):
-   if request.user.is_authenticated:
-         user_profile = UserProfile.objects.get(user=request.user)
-    # if request.method == 'POST':
-    #     rating = request.POST.get('rating')
-    #     feedback = request.POST.get('feedback')
-    #     greeting = request.POST.get('greeting')
-
-    #     if not rating:
-    #         return render(request, 'index.html', {'error_message': 'Please provide a rating.'})
-
-    #     return redirect('index')  # Redirect to the home page
-         return render(request, 'index.html', {'user_profile': user_profile})
-   else:
+    if request.user.is_authenticated:
+        try:
+            user_profile = UserProfile.objects.get(user=request.user)
+            # ... (your logic here)
+        except ObjectDoesNotExist:
+            user_profile = None  # or handle as needed (create a profile, redirect, etc.)
+    else:
         return render(request, 'index.html')
+
+    return render(request, 'index.html', {'user_profile': user_profile})
     
 def signup(request):
     if request.method == 'POST':
@@ -167,11 +187,11 @@ def booking(request):
 
 
 
-def partsorder(request):
+def partsorder(request, category):
     user_profile = UserProfile.objects.get(user=request.user)
-      # Redirect to the booking page after form submission
-    parts_orders = Parts.objects.all()  # Query all the added parts
-    return render(request, 'partsorder.html', {'parts_orders': parts_orders ,'user_profile': user_profile})
+    parts_orders = Parts.objects.filter(categories=category)
+    return render(request, 'partsorder.html', {'parts_orders': parts_orders, 'user_profile': user_profile})
+
 
    
 def customer_dash(request):
@@ -231,8 +251,8 @@ def parts_add(request):
             # Check if a part with the same name or image already exists
             partsname = form.cleaned_data['partsname']
             parts_image = form.cleaned_data['parts_image']
-            category = form.cleaned_data['category']
-            subcategory = form.cleaned_data['subcategory']
+            categories = form.cleaned_data['categories']
+            # subcategory = form.cleaned_data['subcategory']
 
             # if not Parts.objects.filter(partsname=partsname).exists() and \
             #    not Parts.objects.filter(parts_image=parts_image).exists():
@@ -243,8 +263,8 @@ def parts_add(request):
             if not Parts.objects.filter(
                 partsname=partsname,
                 parts_image=parts_image,
-                category=category,
-                subcategory=subcategory
+                categories=categories
+                
             ).exists():
                 # If not, save the form
                 form.save()
@@ -262,9 +282,19 @@ def parts_add(request):
     
 
     return render(request, 'parts_add.html', {'form': form})
+# def parts_list(request):
+#     parts_orders = Parts.objects.all()  # Query all the added parts
+#     return render(request, 'parts_list.html', {'parts_orders': parts_orders})
+
+# def parts_list(request):
+#     parts_orders = Parts.objects.all()  # Query all the added parts
+#     categories = Parts.objects.values_list('categories', flat=True).distinct()  # Fetch distinct categories
+#     return render(request, 'parts_list.html', {'parts_orders': parts_orders, 'categories': categories})
 def parts_list(request):
-    parts_orders = Parts.objects.all()  # Query all the added parts
-    return render(request, 'parts_list.html', {'parts_orders': parts_orders})
+    parts_orders = Parts.objects.all()  # Fetch all parts
+    categories = Parts.objects.values_list('categories', flat=True).distinct()  # Fetch distinct categories
+    return render(request, 'parts_list.html', {'parts_orders': parts_orders, 'categories': categories})
+
 def delete_part(request, part_id):
     if request.method == 'POST':
         parts = Parts.objects.get(pk=part_id)
@@ -303,6 +333,7 @@ def download_parts_list(request):
     # Create a list to hold table data
     table_data = [['Part ID', 'Part Name', 'Description', 'Image']]
 
+
     for part in parts_orders:
         row = [part.id, part.partsname, part.description, '']
         if part.parts_image:  # Adjust the field name for the image
@@ -328,33 +359,33 @@ def download_parts_list(request):
     doc.build([table])
 
     return response
-@login_required
-def add_to_cart(request, product_id):
-    # Retrieve the product and user
-    product = Parts.objects.get(id=product_id)
-    user = request.user
+# @login_required
+# def add_to_cart(request, product_id):
+#     # Retrieve the product and user
+#     product = Parts.objects.get(id=product_id)
+#     user = request.user
 
-    # Check if the product is already in the user's cart
-    cart_item, created = CartItem.objects.get_or_create(user=user, product=product)
+#     # Check if the product is already in the user's cart
+#     cart_item, created = CartItem.objects.get_or_create(user=user, product=product)
 
-    if not created:
-        cart_item.quantity += 1
-        cart_item.save()
+#     if not created:
+#         cart_item.quantity += 1
+#         cart_item.save()
 
-    return JsonResponse({'success': True})
+#     return JsonResponse({'success': True})
 
-@login_required
-def view_cart(request):
-    # user = request.user
-    # cart_items = CartItem.objects.filter(user=user)
-    # return render(request, 'view_cart.html', {'cart_items': cart_items})
-    user = request.user
-    cart_items = CartItem.objects.filter(user=user)
+# @login_required
+# def view_cart(request):
+#     # user = request.user
+#     # cart_items = CartItem.objects.filter(user=user)
+#     # return render(request, 'view_cart.html', {'cart_items': cart_items})
+#     user = request.user
+#     cart_items = CartItem.objects.filter(user=user)
 
-    # Calculate total price
-    total_price = sum(item.product.price * item.quantity for item in cart_items)
+#     # Calculate total price
+#     total_price = sum(item.product.price * item.quantity for item in cart_items)
 
-    return render(request, 'view_cart.html', {'cart_items': cart_items, 'total_price': total_price})
+#     return render(request, 'view_cart.html', {'cart_items': cart_items, 'total_price': total_price})
 @login_required
 def view_wishlist(request):
     user = request.user
@@ -379,16 +410,16 @@ def all_products(request):
     products = products.objects.all()  # Retrieve all products
     return render(request, 'all_products.html', {'products': products})
 
-def remove_from_cart(request, product_id):
-    # Assuming your CartItem model has a unique identifier field, e.g., id
-    try:
-        cart_items = CartItem.objects.get(id=product_id)
-        cart_items.delete()
-        success = True
-    except CartItem.DoesNotExist:
-        success = False
+# def remove_from_cart(request, product_id):
+#     # Assuming your CartItem model has a unique identifier field, e.g., id
+#     try:
+#         cart_items = CartItem.objects.get(id=product_id)
+#         cart_items.delete()
+#         success = True
+#     except CartItem.DoesNotExist:
+#         success = False
 
-    return JsonResponse({'success': success})
+#     return JsonResponse({'success': success})
 
 
 def confirm_booking(request, booking_id):
@@ -462,16 +493,16 @@ def add_worker(request):
         form = WorkerForm()
 
     return render(request, 'add_worker.html', {'form': form})
-def buy_now_view(request, product_id):
-    try:
-        product = Parts.objects.get(id=product_id)
-        # Assuming 'partsname' and 'price' are fields in your Parts model
-        product_name = product.partsname
-        product_price = product.price
+# def buy_now_view(request, product_id):
+#     try:
+#         product = Parts.objects.get(id=product_id)
+#         # Assuming 'partsname' and 'price' are fields in your Parts model
+#         product_name = product.partsname
+#         product_price = product.price
         
-        return render(request, 'buy_now.html', {'product_name': product_name, 'product_price': product_price})
-    except Parts.DoesNotExist:
-        return HttpResponse("Product does not exist.")
+#         return render(request, 'buy_now.html', {'product_name': product_name, 'product_price': product_price})
+#     except Parts.DoesNotExist:
+#         return HttpResponse("Product does not exist.")
 @login_required(login_url='login')
 def edit_profile(request):
     user_profile, created = UserProfile.objects.get_or_create(user=request.user)
@@ -544,6 +575,7 @@ def filter_by_price(request):
 #change password
 @login_required
 def change_password(request):
+    user_profile = UserProfile.objects.get(user=request.user)
     if request.method == 'POST':
         user = get_object_or_404(CustomUser, pk=request.user.pk)  # Fetch the user
         current_password = request.POST['current_password']
@@ -557,7 +589,8 @@ def change_password(request):
                 if new_password == confirm_new_password:
                     user.set_password(new_password)  # Change the password
                     user.save()
-                    login(request, user)  # Re-authenticate the user
+                    update_session_auth_hash(request, user) # Re-authenticate the user
+                    return redirect('index')
                     # Redirect to a success URL or render a success message
                 else:
                     # Passwords don't match, show an error message
@@ -572,4 +605,171 @@ def change_password(request):
             error_message = 'Confirm new password field is missing.'
             return render(request, 'change_password.html', {'error_message': error_message})
     else:
-        return render(request, 'change_password.html')
+        return render(request, 'change_password.html',{'user_profile': user_profile})
+
+@login_required(login_url='login')
+def add_to_cart(request, product_id):
+    product = Parts.objects.get(pk=product_id)
+    cart, created = Cart.objects.get_or_create(user=request.user)
+    cart_item, item_created = CartItem1.objects.get_or_create(cart=cart, product=product)
+    
+    if not item_created:
+        cart_item.quantity += 1
+        cart_item.save()
+    categories = product.categories
+    return redirect('parts_order_category',category=categories)
+@login_required(login_url='login')
+def remove_from_cart(request, product_id):
+    product = Parts.objects.get(pk=product_id)
+    cart = Cart.objects.get(user=request.user)
+    try:
+        cart_item = CartItem1.objects.get(cart=cart, product=product)
+        if cart_item.quantity >= 1:
+            cart_item.delete()
+    except CartItem1.DoesNotExist:
+        pass
+   
+    return redirect('view_cart')
+
+@login_required(login_url='login')
+def view_cart(request):
+    user_profile = UserProfile.objects.get(user=request.user)
+    cart = request.user.cart
+    cart_items = CartItem1.objects.filter(cart=cart)
+    return render(request, 'view_cart.html', {'cart_items': cart_items,'user_profile': user_profile,})
+
+@login_required(login_url='login')
+def increase_cart_item(request, product_id):
+    product = Parts.objects.get(pk=product_id)
+    cart = request.user.cart
+    cart_item, created = CartItem1.objects.get_or_create(cart=cart, product=product)
+
+    cart_item.quantity += 1
+    cart_item.save()
+
+    return redirect('view_cart')
+
+@login_required(login_url='login')
+def decrease_cart_item(request, product_id):
+    product = Parts.objects.get(pk=product_id)
+    cart = Cart.objects.get(user=request.user)
+    
+    try:
+        cart_item = cart.cartitem1_set.get(product=product)
+        
+        if cart_item.quantity > 1:
+            cart_item.quantity -= 1
+            cart_item.save()
+        else:
+            cart_item.delete()
+
+    except CartItem1.DoesNotExist:
+        pass
+
+    return redirect('view_cart')
+    
+@login_required(login_url='login')
+def fetch_cart_count(request):
+    cart_count = 0
+    if request.user.is_authenticated:
+        cart = request.user.cart
+        cart_count = CartItem1.objects.filter(cart=cart).count()
+    return JsonResponse({'cart_count': cart_count})
+def get_cart_count(request):
+    if request.user.is_authenticated:
+        cart_items = CartItem1.objects.filter(cart=request.user.cart)
+        cart_count = cart_items.count()
+    else:
+        cart_count = 0
+    return cart_count
+
+@csrf_exempt
+def create_order(request):
+    if request.method == 'POST':
+        user = request.user
+        cart = user.cart
+
+        cart_items = CartItem1.objects.filter(cart=cart)
+        total_amount = sum(item.product.price * item.quantity for item in cart_items)
+
+        try:
+            order = Order.objects.create(user=user, total_amount=total_amount)
+            for cart_item in cart_items:
+                OrderItem.objects.create(
+                    order=order,
+                    product=cart_item.product,
+                    quantity=cart_item.quantity,
+                    item_total=cart_item.product.price * cart_item.quantity
+                )
+
+            client = razorpay.Client(auth=(settings.RAZOR_KEY_ID, settings.RAZOR_KEY_SECRET))
+            payment_data = {
+                'amount': int(total_amount * 100),
+                'currency': 'INR',
+                'receipt': f'order_{order.id}',
+                'payment_capture': '1'
+            }
+            orderData = client.order.create(data=payment_data)
+            order.payment_id = orderData['id']
+            order.save()
+
+            return JsonResponse({'order_id': orderData['id']})
+        
+        except Exception as e:
+            print(str(e))
+            return JsonResponse({'error': 'An error occurred. Please try again.'}, status=500)
+def checkout(request):
+    
+    cart_items = CartItem1.objects.filter(cart=request.user.cart)
+    total_amount = sum(item.product.price * item.quantity for item in cart_items)
+
+    cart_count = get_cart_count(request)
+    email = request.user.email
+    username = request.user.username
+
+    context = {
+        'cart_count': cart_count,
+        'cart_items': cart_items,
+        'total_amount': total_amount,
+        'email':email,
+        'username': username
+    }
+    return render(request, 'checkout.html',context)
+@csrf_exempt
+def handle_payment(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        razorpay_order_id = data.get('order_id')
+        payment_id = data.get('payment_id')
+
+        try:
+            order = Order.objects.get(payment_id=razorpay_order_id)
+
+            client = razorpay.Client(auth=(settings.RAZOR_KEY_ID, settings.RAZOR_KEY_SECRET))
+            payment = client.payment.fetch(payment_id)
+
+            if payment['status'] == 'captured':
+                order.payment_status = True
+                order.save()
+                # user = request.user
+                # user.cart.cartitem_set.all().delete()
+                return JsonResponse({'message': 'Payment successful'})
+            else:
+                return JsonResponse({'message': 'Payment failed'})
+
+        except Order.DoesNotExist:
+            return JsonResponse({'message': 'Invalid Order ID'})
+        except Exception as e:
+
+            print(str(e))
+            return JsonResponse({'message': 'Server error, please try again later.'})
+
+def order_details_api(request, order_id):
+    # Your logic to retrieve order details based on order_id
+    # ...
+
+    # Return order details as a JSON response
+    order_details = {
+        # ...
+    }
+    return JsonResponse(order_details)

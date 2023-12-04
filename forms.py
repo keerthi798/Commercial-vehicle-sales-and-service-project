@@ -13,7 +13,7 @@ from .models import Parts
 class PartForm(forms.ModelForm):
     class Meta:
         model = Parts
-        fields = ['partsname', 'description', 'price', 'parts_image', 'quantity','category', 'subcategory']
+        fields = ['partsname', 'description', 'price', 'parts_image', 'quantity', 'categories']
 class WorkerForm(forms.ModelForm):
     class Meta:
         model = CustomUser
